@@ -47,11 +47,11 @@ How far can you go before gravity wins?
 - **Age rating:** 4+ (no objectionable content)
 - **Privacy:** Data Not Collected
 - **In-App Purchases:** None
-- **Support URL:** https://<your-username>.github.io/orbitor/
-- **Marketing URL (optional):** https://<your-username>.github.io/orbitor/
-- **Privacy Policy URL:** https://<your-username>.github.io/orbitor/privacy.html
+- **Support URL:** https://stoopsj462.github.io/orbitor-game/
+- **Marketing URL (optional):** https://stoopsj462.github.io/orbitor-game/
+- **Privacy Policy URL:** https://stoopsj462.github.io/orbitor-game/privacy.html
 
-> Replace `<your-username>` with your GitHub username once GitHub Pages is enabled (see README).
+> These URLs go live once GitHub Pages is enabled (Settings → Pages → main → /docs).
 
 ## Screenshot requirements (minimum)
 Apple requires at least one set; these cover everything:

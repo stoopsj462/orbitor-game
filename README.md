@@ -32,12 +32,12 @@ No image assets, no ads, no in-app purchases, no tracking.
 - Universal target: iPhone, iPad, Mac
 
 ## Hosting the privacy policy (GitHub Pages)
-1. Push this repo to GitHub (name it `orbitor`).
+1. Push this repo to GitHub (`orbitor-game`).
 2. In the repo: **Settings → Pages → Build and deployment**.
 3. Source: **Deploy from a branch**, Branch: **main**, Folder: **/docs**. Save.
 4. After a minute your pages are live at:
-   - Landing: `https://<your-username>.github.io/orbitor/`
-   - Privacy: `https://<your-username>.github.io/orbitor/privacy.html`
+   - Landing: `https://stoopsj462.github.io/orbitor-game/`
+   - Privacy: `https://stoopsj462.github.io/orbitor-game/privacy.html`
 5. Use the privacy URL in App Store Connect.
 
 ## License
