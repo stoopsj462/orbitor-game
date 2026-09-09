@@ -57,8 +57,13 @@ How far can you go before gravity wins?
 Apple requires at least one set; these cover everything:
 | Device | Size (px) | Simulator to use |
 |---|---|---|
-| iPhone 6.9" | 1320 × 2868 | iPhone 16 Pro Max |
-| iPad 13" | 2064 × 2752 | iPad Pro 13-inch (M4) |
+| iPhone (6.5"/6.7" slot) | 1284 × 2778 (or 1242 × 2688) | iPhone 13 Pro Max / 14 Plus |
+| iPad 13" | 2064 × 2752 (or 2048 × 2732) | iPad Pro 13-inch (M4) |
 | Mac | 2880 × 1800 | Resize the Mac app window |
+
+Notes: App Store Connect's per-version screenshot UI for this app exposes the
+**6.5" iPhone** slot (1242 × 2688 / 1284 × 2778), not a 6.9" slot. Screenshots
+must have **no alpha channel**. Correctly-sized, flattened copies live in
+`store/screenshots/appstore/`.
 
 Suggested shots (in order): **menu**, **mid-run with a trail**, **game over / new best**, **the Star Shop**.
