@@ -173,6 +173,8 @@ final class GameModel {
     var stars = 0                 // stars collected this run
     var best = 0
     var starBalance = 0           // lifetime banked stars available to spend
+    /// True when the most recent run strictly beat the previous best (drives the "NEW BEST!" banner).
+    var didSetNewBest = false
     var selectedSkinIndex = 0
     /// The highest skin newly unlocked in the most recent run, for the celebration banner.
     var newlyUnlocked: OrbitSkin?
@@ -222,8 +224,8 @@ final class GameModel {
 
     var unlockedCount: Int { GameModel.skins.filter { isUnlocked($0) }.count }
 
-    func selectSkin(_ index: Int) {
-        guard GameModel.skins.indices.contains(index) else { return }
+    func selectSkin(_ id: Int) {
+        guard let index = GameModel.skins.firstIndex(where: { $0.id == id }) else { return }
         guard isUnlocked(GameModel.skins[index]) else { return }
         selectedSkinIndex = index
         UserDefaults.standard.set(index, forKey: "orbit.skin")
@@ -327,6 +329,7 @@ final class GameModel {
         lastSpawnDistance = 0
         shake = 0
         newlyUnlocked = nil
+        didSetNewBest = false
         phase = .playing
 
         // Lay down a short safe runway before the first obstacle.
@@ -347,6 +350,7 @@ final class GameModel {
         UserDefaults.standard.set(starBalance, forKey: "orbit.stars")
 
         let previousBest = best
+        didSetNewBest = score > best && score > 0
         if score > best {
             best = score
             UserDefaults.standard.set(best, forKey: "orbit.best")

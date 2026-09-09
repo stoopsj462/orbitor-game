@@ -383,10 +383,10 @@ struct GameView: View {
 
     private var gameOverPanel: some View {
         VStack(spacing: 14) {
-            Text(model.score >= model.best && model.score > 0 ? "NEW BEST!" : "GAME OVER")
+            Text(model.didSetNewBest ? "NEW BEST!" : "GAME OVER")
                 .font(.system(size: 40, weight: .heavy, design: .rounded))
-                .foregroundStyle(model.score >= model.best && model.score > 0 ? gold : danger)
-                .shadow(color: (model.score >= model.best ? gold : danger).opacity(0.7), radius: 12)
+                .foregroundStyle(model.didSetNewBest ? gold : danger)
+                .shadow(color: (model.didSetNewBest ? gold : danger).opacity(0.7), radius: 12)
                 .allowsHitTesting(false)
 
             HStack(spacing: 28) {
