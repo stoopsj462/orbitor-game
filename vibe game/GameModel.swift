@@ -26,6 +26,67 @@ enum CosmeticKind {
     case planet
 }
 
+/// Every knob that defines how a difficulty level plays.
+struct DifficultyTuning {
+    let baseSpeed: Double       // travel speed at score 0, radians/second
+    let maxSpeed: Double        // ceiling the ramp never exceeds
+    let speedRamp: Double       // speed gained per point of score
+    let startSlotGap: Double    // radians between spawn slots at score 0
+    let minSlotGap: Double      // tightest the slots ever get
+    let gapTighten: Double      // gap removed per point of score
+    let safeStarChance: Double  // odds a star appears on the safe ring
+    let runway: Double          // safe distance before the very first barrier
+}
+
+/// The four selectable levels of play. Each owns its full tuning curve and its own
+/// persisted best score, so a gentle run on Easy never overwrites an Extreme record.
+enum Difficulty: String, CaseIterable, Identifiable {
+    case easy, normal, hard, extreme
+
+    var id: String { rawValue }
+
+    var name: String {
+        switch self {
+        case .easy:    return "EASY"
+        case .normal:  return "NORMAL"
+        case .hard:    return "HARD"
+        case .extreme: return "EXTREME"
+        }
+    }
+
+    /// Accent color for the picker pills and the in-run HUD badge.
+    var tint: Color {
+        switch self {
+        case .easy:    return Color(red: 0.42, green: 1.00, blue: 0.55)
+        case .normal:  return Color(red: 0.30, green: 0.85, blue: 1.00)
+        case .hard:    return Color(red: 1.00, green: 0.55, blue: 0.20)
+        case .extreme: return Color(red: 1.00, green: 0.26, blue: 0.40)
+        }
+    }
+
+    /// Normal reproduces the original single-difficulty curve exactly.
+    var tuning: DifficultyTuning {
+        switch self {
+        case .easy:
+            return DifficultyTuning(baseSpeed: 1.30, maxSpeed: 3.00, speedRamp: 0.016,
+                                    startSlotGap: 1.32, minSlotGap: 0.90, gapTighten: 0.004,
+                                    safeStarChance: 0.88, runway: 3.6)
+        case .normal:
+            return DifficultyTuning(baseSpeed: 1.70, maxSpeed: 4.40, speedRamp: 0.030,
+                                    startSlotGap: 1.08, minSlotGap: 0.62, gapTighten: 0.006,
+                                    safeStarChance: 0.72, runway: 2.6)
+        case .hard:
+            return DifficultyTuning(baseSpeed: 2.05, maxSpeed: 5.20, speedRamp: 0.040,
+                                    startSlotGap: 0.98, minSlotGap: 0.56, gapTighten: 0.008,
+                                    safeStarChance: 0.62, runway: 2.2)
+        case .extreme:
+            return DifficultyTuning(baseSpeed: 2.40, maxSpeed: 6.00, speedRamp: 0.052,
+                                    startSlotGap: 0.90, minSlotGap: 0.48, gapTighten: 0.010,
+                                    safeStarChance: 0.52, runway: 1.9)
+        }
+    }
+}
+
 /// Something living on the orbit track: either a barrier to dodge or a star to collect.
 struct TrackEntity: Identifiable {
     enum Kind { case obstacle, star }
@@ -145,8 +206,9 @@ final class GameModel {
     let shipScreenAngle: Double = -.pi / 2
     /// How close (in radians) an entity must be to the ship to count as a hit / pickup.
     let hitWindow: Double = 0.13
-    private let baseSpeed: Double = 1.7
-    private let maxSpeed: Double = 4.4
+
+    /// Tuning for the level currently selected.
+    private var tuning: DifficultyTuning { difficulty.tuning }
 
     // MARK: World state
 
@@ -171,8 +233,23 @@ final class GameModel {
 
     var score = 0
     var stars = 0                 // stars collected this run
-    var best = 0
     var starBalance = 0           // lifetime banked stars available to spend
+
+    /// The level of play. Persisted so the player's choice survives relaunch.
+    var difficulty: Difficulty = .normal
+    /// Best score per level, so each difficulty keeps its own record.
+    var bests: [Difficulty: Int] = [:]
+    /// Best on the level currently selected.
+    var best: Int { bests[difficulty] ?? 0 }
+    /// Highest best across every level — what color unlocks are measured against, so
+    /// grinding Easy can't cheaply unlock everything.
+    var bestOverall: Int { bests.values.max() ?? 0 }
+    /// Best on the level that was actually just played, frozen at game over so the
+    /// results panel stays truthful if the player switches level before retrying.
+    var lastRunBest = 0
+    /// True when there is anything worth erasing (drives the "START OVER" button).
+    var hasProgress: Bool { bestOverall > 0 || starBalance > 0 }
+
     /// True when the most recent run strictly beat the previous best (drives the "NEW BEST!" banner).
     var didSetNewBest = false
     var selectedSkinIndex = 0
@@ -195,21 +272,100 @@ final class GameModel {
 
     // MARK: Lifecycle
 
+    /// UserDefaults key holding the best score for one level.
+    private nonisolated static func bestKey(_ level: Difficulty) -> String {
+        "orbit.best.\(level.rawValue)"
+    }
+
+    /// Every key this game writes, used by `resetProgress()`. "orbit.best" is the
+    /// pre-difficulty single-best key, still read once for migration.
+    private nonisolated static var allDefaultsKeys: [String] {
+        ["orbit.best", "orbit.stars", "orbit.skin", "orbit.owned",
+         "orbit.trail", "orbit.planet", "orbit.difficulty"]
+        + Difficulty.allCases.map(bestKey)
+    }
+
     init() {
         let defaults = UserDefaults.standard
-        best = defaults.integer(forKey: "orbit.best")
+
+        for level in Difficulty.allCases {
+            bests[level] = defaults.integer(forKey: GameModel.bestKey(level))
+        }
+        // Carry a pre-difficulty best forward into Normal, whose curve matches the
+        // original game exactly. Idempotent, so it is safe to run on every launch.
+        let legacyBest = defaults.integer(forKey: "orbit.best")
+        if legacyBest > bests[.normal, default: 0] {
+            bests[.normal] = legacyBest
+            defaults.set(legacyBest, forKey: GameModel.bestKey(.normal))
+        }
+
+        if let raw = defaults.string(forKey: "orbit.difficulty"),
+           let saved = Difficulty(rawValue: raw) {
+            difficulty = saved
+        }
+        speed = difficulty.tuning.baseSpeed
+
         starBalance = defaults.integer(forKey: "orbit.stars")
 
         let savedSkin = defaults.integer(forKey: "orbit.skin")
         selectedSkinIndex = min(max(savedSkin, 0), GameModel.skins.count - 1)
 
         ownedCosmetics = Set(defaults.stringArray(forKey: "orbit.owned") ?? [])
-        // Free defaults are always owned.
-        for item in GameModel.trails where item.cost == 0 { ownedCosmetics.insert(item.id) }
-        for item in GameModel.planets where item.cost == 0 { ownedCosmetics.insert(item.id) }
+        grantFreeCosmetics()
 
         if let t = defaults.string(forKey: "orbit.trail"), ownedCosmetics.contains(t) { selectedTrailID = t }
         if let p = defaults.string(forKey: "orbit.planet"), ownedCosmetics.contains(p) { selectedPlanetID = p }
+    }
+
+    /// The zero-cost trail and planet are always owned.
+    private func grantFreeCosmetics() {
+        for item in GameModel.trails where item.cost == 0 { ownedCosmetics.insert(item.id) }
+        for item in GameModel.planets where item.cost == 0 { ownedCosmetics.insert(item.id) }
+    }
+
+    // MARK: Difficulty
+
+    func selectDifficulty(_ level: Difficulty) {
+        guard phase != .playing, level != difficulty else { return }
+        difficulty = level
+        UserDefaults.standard.set(level.rawValue, forKey: "orbit.difficulty")
+        impact(.light)
+    }
+
+    // MARK: Start over
+
+    /// Erases every scrap of saved progress and returns the game to a fresh-install
+    /// state. Destructive and irreversible — callers must confirm with the player first.
+    func resetProgress() {
+        let defaults = UserDefaults.standard
+        for key in GameModel.allDefaultsKeys { defaults.removeObject(forKey: key) }
+
+        bests = [:]
+        lastRunBest = 0
+        starBalance = 0
+        difficulty = .normal
+        selectedSkinIndex = 0
+        ownedCosmetics = []
+        grantFreeCosmetics()
+        selectedTrailID = GameModel.trails[0].id
+        selectedPlanetID = GameModel.planets[0].id
+
+        // Drop any run in progress and go back to a clean menu.
+        phase = .menu
+        score = 0
+        stars = 0
+        distance = 0
+        speed = tuning.baseSpeed
+        shipRing = 0
+        shipLaneValue = 0
+        entities.removeAll()
+        particles.removeAll()
+        lastSpawnDistance = 0
+        shake = 0
+        newlyUnlocked = nil
+        didSetNewBest = false
+
+        impact(.heavy)
     }
 
     // MARK: Skins
@@ -217,7 +373,7 @@ final class GameModel {
     var activeSkin: OrbitSkin { GameModel.skins[selectedSkinIndex] }
     var shipColor: Color { activeSkin.color }
 
-    func isUnlocked(_ skin: OrbitSkin) -> Bool { best >= skin.unlockScore }
+    func isUnlocked(_ skin: OrbitSkin) -> Bool { bestOverall >= skin.unlockScore }
 
     /// The next skin the player has not yet unlocked (nil once everything is earned).
     var nextLockedSkin: OrbitSkin? { GameModel.skins.first { !isUnlocked($0) } }
@@ -319,7 +475,7 @@ final class GameModel {
 
     func startRun() {
         distance = 0
-        speed = baseSpeed
+        speed = tuning.baseSpeed
         score = 0
         stars = 0
         shipRing = 0
@@ -333,7 +489,7 @@ final class GameModel {
         phase = .playing
 
         // Lay down a short safe runway before the first obstacle.
-        lastSpawnDistance = 2.6
+        lastSpawnDistance = tuning.runway
         while lastSpawnDistance < distance + spawnHorizon {
             spawnSlot(at: lastSpawnDistance)
             lastSpawnDistance += currentSlotGap
@@ -349,16 +505,18 @@ final class GameModel {
         starBalance += stars
         UserDefaults.standard.set(starBalance, forKey: "orbit.stars")
 
-        let previousBest = best
+        // Records are per level, but unlocks are measured against the best of all levels.
+        let previousOverall = bestOverall
         didSetNewBest = score > best && score > 0
-        if score > best {
-            best = score
-            UserDefaults.standard.set(best, forKey: "orbit.best")
+        if didSetNewBest {
+            bests[difficulty] = score
+            UserDefaults.standard.set(score, forKey: GameModel.bestKey(difficulty))
         }
+        lastRunBest = best
 
         // Highest skin whose threshold we crossed this run.
         newlyUnlocked = GameModel.skins.last {
-            $0.unlockScore > previousBest && $0.unlockScore <= best && $0.unlockScore > 0
+            $0.unlockScore > previousOverall && $0.unlockScore <= bestOverall && $0.unlockScore > 0
         }
         // Reward the player by immediately equipping their newest color.
         if let unlocked = newlyUnlocked {
@@ -371,15 +529,16 @@ final class GameModel {
     // MARK: Difficulty curve
 
     private var currentSlotGap: Double {
-        max(0.62, 1.08 - Double(score) * 0.006)
+        max(tuning.minSlotGap, tuning.startSlotGap - Double(score) * tuning.gapTighten)
     }
 
     private func spawnSlot(at d: Double) {
         let obstacleRing = Bool.random() ? 0 : 1
         entities.append(TrackEntity(distance: d, ring: obstacleRing, kind: .obstacle))
 
-        // A star lives on the safe ring ~72% of the time — reward the player for switching.
-        if Double.random(in: 0...1) < 0.72 {
+        // A star often lives on the safe ring — reward the player for switching.
+        // Harder levels make that reward scarcer.
+        if Double.random(in: 0...1) < tuning.safeStarChance {
             entities.append(TrackEntity(distance: d, ring: 1 - obstacleRing, kind: .star))
         }
     }
@@ -398,7 +557,7 @@ final class GameModel {
         guard phase == .playing else { return }
 
         // Ramp difficulty and advance along the track.
-        speed = min(maxSpeed, baseSpeed + Double(score) * 0.03)
+        speed = min(tuning.maxSpeed, tuning.baseSpeed + Double(score) * tuning.speedRamp)
         distance += speed * dt
 
         // Keep the track populated ahead of the ship.

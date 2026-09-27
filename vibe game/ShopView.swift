@@ -94,10 +94,10 @@ struct ShopView: View {
             Text(title.uppercased())
                 .font(.system(size: 13, weight: .bold, design: .rounded))
                 .foregroundStyle(.white.opacity(0.45))
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 12) {
-                    content()
-                }
+            // Wrap cards into rows so every item is visible without sideways scrolling.
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 104), spacing: 12)],
+                      alignment: .leading, spacing: 12) {
+                content()
             }
         }
     }

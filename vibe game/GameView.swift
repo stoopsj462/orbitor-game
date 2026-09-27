@@ -12,6 +12,10 @@ import QuartzCore
 struct GameView: View {
     @State private var model = GameModel()
     @State private var showShop = false
+    @State private var showReset = false
+
+    /// True while a modal owns the screen, so a stray tap can't start a run behind it.
+    private var isModalUp: Bool { showShop || showReset }
 
     // Palette
     private let spaceTop = Color(red: 0.04, green: 0.05, blue: 0.11)
@@ -40,24 +44,29 @@ struct GameView: View {
                 if showShop {
                     ShopView(model: model, isPresented: $showShop)
                 }
+
+                if showReset {
+                    resetConfirm
+                }
             }
             .onAppear { model.size = geo.size }
             .onChange(of: geo.size) { _, newValue in model.size = newValue }
         }
         .background(spaceBottom.ignoresSafeArea())
         .contentShape(Rectangle())
-        .onTapGesture { if !showShop { model.handleTap() } }
+        .onTapGesture { if !isModalUp { model.handleTap() } }
         .focusable()
-        .onKeyPress(.space) { guard !showShop else { return .ignored }; model.handleTap(); return .handled }
-        .onKeyPress(.return) { guard !showShop else { return .ignored }; model.handleTap(); return .handled }
+        .onKeyPress(.space) { guard !isModalUp else { return .ignored }; model.handleTap(); return .handled }
+        .onKeyPress(.return) { guard !isModalUp else { return .ignored }; model.handleTap(); return .handled }
         .onKeyPress(KeyEquivalent("s")) {
-            guard !showShop, model.phase != .playing else { return .ignored }
+            guard !isModalUp, model.phase != .playing else { return .ignored }
             showShop = true
             return .handled
         }
         .onKeyPress(.escape) {
-            guard showShop else { return .ignored }
+            guard isModalUp else { return .ignored }
             showShop = false
+            showReset = false
             return .handled
         }
         .task {
@@ -78,7 +87,7 @@ struct GameView: View {
         let args = CommandLine.arguments
         guard let i = args.firstIndex(of: "-uiState"), i + 1 < args.count else { return }
         // Seed some progress so shop/menu look populated.
-        model.best = 250
+        model.bests[.normal] = 250
         model.starBalance = 140
         switch args[i + 1] {
         case "shop": showShop = true
@@ -322,9 +331,14 @@ struct GameView: View {
                     .foregroundStyle(gold)
                     .font(.system(size: 20, weight: .bold, design: .rounded))
                 Spacer()
-                Text("BEST \(model.best)")
-                    .foregroundStyle(.white.opacity(0.5))
-                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text(model.difficulty.name)
+                        .foregroundStyle(model.difficulty.tint.opacity(0.9))
+                        .font(.system(size: 11, weight: .bold, design: .rounded))
+                    Text("BEST \(model.best)")
+                        .foregroundStyle(.white.opacity(0.5))
+                        .font(.system(size: 14, weight: .semibold, design: .rounded))
+                }
             }
             Text("\(model.score)")
                 .foregroundStyle(.white)
@@ -359,21 +373,20 @@ struct GameView: View {
                 .font(.system(size: 17, weight: .medium, design: .rounded))
                 .foregroundStyle(.white.opacity(0.75))
                 .allowsHitTesting(false)
-            if model.best > 0 {
-                Text("BEST  \(model.best)")
-                    .font(.system(size: 16, weight: .bold, design: .rounded))
-                    .foregroundStyle(gold)
-                    .allowsHitTesting(false)
-            }
-
-            skinSection
-                .padding(.top, 6)
-
-            shopButton
+            difficultyPicker
                 .padding(.top, 2)
 
+            skinSection
+                .padding(.top, 2)
+
+            shopButton
+
+            if model.hasProgress {
+                startOverButton
+            }
+
             pill("TAP TO START")
-                .padding(.top, 6)
+                .padding(.top, 4)
                 .allowsHitTesting(false)
         }
         .padding(32)
@@ -392,13 +405,15 @@ struct GameView: View {
             HStack(spacing: 28) {
                 stat(title: "SCORE", value: "\(model.score)", color: .white)
                 stat(title: "STARS", value: "+\(model.stars)", color: gold)
-                stat(title: "BEST", value: "\(model.best)", color: cyan)
+                stat(title: "BEST", value: "\(model.lastRunBest)", color: cyan)
             }
             .allowsHitTesting(false)
 
             if let unlock = model.newlyUnlocked {
                 banner(icon: "sparkles", text: "New color unlocked: \(unlock.name)!", color: unlock.color)
             }
+
+            difficultyRow
 
             skinSection
                 .padding(.top, 4)
@@ -445,6 +460,133 @@ struct GameView: View {
             .padding(.vertical, 10)
             .background(Capsule().fill(.white.opacity(0.12)))
             .overlay(Capsule().stroke(.white.opacity(0.15), lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: Difficulty picker
+
+    /// Level pills plus a caption naming the record on the selected level.
+    private var difficultyPicker: some View {
+        VStack(spacing: 8) {
+            difficultyRow
+            Text(model.best > 0
+                 ? "\(model.difficulty.name) · BEST \(model.best)"
+                 : "\(model.difficulty.name) · no record yet")
+                .font(.system(size: 12, weight: .bold, design: .rounded))
+                .foregroundStyle(model.best > 0 ? gold : .white.opacity(0.5))
+                .allowsHitTesting(false)
+        }
+    }
+
+    /// Just the four pills. Scrolls rather than clipping on the narrowest phones.
+    private var difficultyRow: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(Difficulty.allCases) { level in
+                    difficultyPill(level)
+                }
+            }
+            .padding(.horizontal, 4)
+        }
+        .frame(maxWidth: 360)
+    }
+
+    private func difficultyPill(_ level: Difficulty) -> some View {
+        let selected = model.difficulty == level
+        return Button {
+            model.selectDifficulty(level)
+        } label: {
+            Text(level.name)
+                .font(.system(size: 11, weight: .bold, design: .rounded))
+                .foregroundStyle(selected ? .black : .white.opacity(0.6))
+                .padding(.horizontal, 11)
+                .padding(.vertical, 7)
+                .background(
+                    Capsule().fill(selected ? level.tint : Color.white.opacity(0.07))
+                )
+                .overlay(
+                    Capsule().stroke(.white.opacity(selected ? 0 : 0.12), lineWidth: 1)
+                )
+                .shadow(color: selected ? level.tint.opacity(0.55) : .clear, radius: 8)
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: Start over
+
+    private var startOverButton: some View {
+        Button { showReset = true } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "arrow.counterclockwise")
+                Text("START OVER")
+            }
+            .font(.system(size: 13, weight: .bold, design: .rounded))
+            .foregroundStyle(danger.opacity(0.95))
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(Capsule().fill(danger.opacity(0.13)))
+            .overlay(Capsule().stroke(danger.opacity(0.32), lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// Confirmation gate for the irreversible wipe.
+    private var resetConfirm: some View {
+        ZStack {
+            Color.black.opacity(0.78)
+                .ignoresSafeArea()
+                .contentShape(Rectangle())
+                .onTapGesture { showReset = false }
+
+            VStack(spacing: 16) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 32))
+                    .foregroundStyle(danger)
+
+                Text("START OVER?")
+                    .font(.system(size: 26, weight: .heavy, design: .rounded))
+                    .foregroundStyle(.white)
+
+                Text("This erases every best score, your \(model.starBalance) banked stars, all unlocked colors and everything bought in the shop.\n\nThis can't be undone.")
+                    .multilineTextAlignment(.center)
+                    .font(.system(size: 14, weight: .medium, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.7))
+
+                HStack(spacing: 12) {
+                    confirmButton("CANCEL", color: .white.opacity(0.85), filled: false) {
+                        showReset = false
+                    }
+                    confirmButton("ERASE ALL", color: danger, filled: true) {
+                        model.resetProgress()
+                        showReset = false
+                    }
+                }
+                .padding(.top, 4)
+            }
+            .padding(28)
+            .frame(maxWidth: 380)
+            .background(RoundedRectangle(cornerRadius: 28, style: .continuous).fill(spaceTop))
+            .overlay(
+                RoundedRectangle(cornerRadius: 28, style: .continuous)
+                    .stroke(.white.opacity(0.1), lineWidth: 1)
+            )
+            .padding(24)
+            .shadow(color: .black.opacity(0.6), radius: 30)
+        }
+        .transition(.opacity)
+    }
+
+    private func confirmButton(_ title: String, color: Color, filled: Bool,
+                               action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 15, weight: .bold, design: .rounded))
+                .foregroundStyle(filled ? .black : color)
+                .padding(.horizontal, 22)
+                .padding(.vertical, 11)
+                .background(Capsule().fill(filled ? AnyShapeStyle(color) : AnyShapeStyle(Color.white.opacity(0.1))))
+                .overlay(Capsule().stroke(.white.opacity(filled ? 0 : 0.15), lineWidth: 1))
         }
         .buttonStyle(.plain)
     }
