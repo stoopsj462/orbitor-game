@@ -51,7 +51,7 @@ How far can you go before gravity wins?
 - **Marketing URL (optional):** https://stoopsj462.github.io/orbitor-game/
 - **Privacy Policy URL:** https://stoopsj462.github.io/orbitor-game/privacy.html
 
-> These URLs go live once GitHub Pages is enabled (Settings → Pages → main → /docs).
+> These URLs go live once GitHub Pages is enabled with **GitHub Actions** as the source and the deploy workflow completes.
 
 ## Screenshot requirements (minimum)
 Apple requires at least one set; these cover everything:
