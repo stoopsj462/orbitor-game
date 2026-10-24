@@ -35,6 +35,9 @@ No ads. No in-app purchases. No tracking. Pay once, orbit forever.
 
 How far can you go before gravity wins?
 
+## What's New (v1.1)
+`Choose your challenge: Easy, Normal, Hard, and Extreme are here, each with its own best score. Not happy with where you started? Start Over wipes your save for a clean run. Plus a tidier Star Shop.`
+
 ## What's New (v1.0)
 `Initial release. Tap in and chase your first high score.`
 
