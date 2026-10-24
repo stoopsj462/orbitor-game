@@ -12,6 +12,7 @@ struct vibe_gameApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .task { GameCenterManager.shared.authenticate() }
         }
         #if os(macOS)
         .defaultSize(width: 1440, height: 900)

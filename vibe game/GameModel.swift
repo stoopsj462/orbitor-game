@@ -64,6 +64,12 @@ enum Difficulty: String, CaseIterable, Identifiable {
         }
     }
 
+    /// Game Center leaderboard for this level's best scores. Must match a
+    /// leaderboard ID configured for this app in App Store Connect.
+    var leaderboardID: String {
+        "com.jasonstoops.orbitor.leaderboard.\(rawValue)"
+    }
+
     /// Normal reproduces the original single-difficulty curve exactly.
     var tuning: DifficultyTuning {
         switch self {
@@ -513,6 +519,10 @@ final class GameModel {
             UserDefaults.standard.set(score, forKey: GameModel.bestKey(difficulty))
         }
         lastRunBest = best
+
+        // GameKit keeps the player's best per leaderboard, so submitting every
+        // run's score is safe and keeps the board current without extra checks.
+        GameCenterManager.shared.submitScore(score, leaderboardID: difficulty.leaderboardID)
 
         // Highest skin whose threshold we crossed this run.
         newlyUnlocked = GameModel.skins.last {

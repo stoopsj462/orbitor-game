@@ -13,9 +13,11 @@ struct GameView: View {
     @State private var model = GameModel()
     @State private var showShop = false
     @State private var showReset = false
+    @State private var showLeaderboard = false
+    private var gameCenter = GameCenterManager.shared
 
     /// True while a modal owns the screen, so a stray tap can't start a run behind it.
-    private var isModalUp: Bool { showShop || showReset }
+    private var isModalUp: Bool { showShop || showReset || showLeaderboard }
 
     // Palette
     private let spaceTop = Color(red: 0.04, green: 0.05, blue: 0.11)
@@ -67,11 +69,15 @@ struct GameView: View {
             guard isModalUp else { return .ignored }
             showShop = false
             showReset = false
+            showLeaderboard = false
             return .handled
         }
         .task {
             applyLaunchStateForScreenshots()
             await runLoop()
+        }
+        .sheet(isPresented: $showLeaderboard) {
+            GameCenterLeaderboardView(leaderboardID: model.difficulty.leaderboardID, isPresented: $showLeaderboard)
         }
         #if os(macOS)
         .frame(minWidth: 480, minHeight: 640)
@@ -82,6 +88,7 @@ struct GameView: View {
 
     /// DEBUG-only hook to place the game into a specific state for capturing marketing
     /// screenshots, e.g. `Orbitor -uiState shop`. Has no effect in release builds or normal launches.
+    /// An optional `-difficulty easy|normal|hard|extreme` picks the level before a `play` run starts.
     private func applyLaunchStateForScreenshots() {
         #if DEBUG
         let args = CommandLine.arguments
@@ -89,6 +96,10 @@ struct GameView: View {
         // Seed some progress so shop/menu look populated.
         model.bests[.normal] = 250
         model.starBalance = 140
+        if let d = args.firstIndex(of: "-difficulty"), d + 1 < args.count,
+           let level = Difficulty(rawValue: args[d + 1]) {
+            model.selectDifficulty(level)
+        }
         switch args[i + 1] {
         case "shop": showShop = true
         case "play":
@@ -379,7 +390,12 @@ struct GameView: View {
             skinSection
                 .padding(.top, 2)
 
-            shopButton
+            HStack(spacing: 10) {
+                shopButton
+                if gameCenter.isAuthenticated {
+                    leaderboardButton
+                }
+            }
 
             if model.hasProgress {
                 startOverButton
@@ -418,8 +434,13 @@ struct GameView: View {
             skinSection
                 .padding(.top, 4)
 
-            shopButton
-                .padding(.top, 2)
+            HStack(spacing: 10) {
+                shopButton
+                if gameCenter.isAuthenticated {
+                    leaderboardButton
+                }
+            }
+            .padding(.top, 2)
 
             pill("TAP TO RETRY")
                 .padding(.top, 6)
@@ -453,6 +474,24 @@ struct GameView: View {
                 Text("·")
                 Image(systemName: "star.fill").font(.system(size: 12))
                 Text("\(model.starBalance)")
+            }
+            .font(.system(size: 15, weight: .bold, design: .rounded))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 10)
+            .background(Capsule().fill(.white.opacity(0.12)))
+            .overlay(Capsule().stroke(.white.opacity(0.15), lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: Leaderboard entry
+
+    private var leaderboardButton: some View {
+        Button { showLeaderboard = true } label: {
+            HStack(spacing: 7) {
+                Image(systemName: "trophy.fill")
+                Text("RANKS")
             }
             .font(.system(size: 15, weight: .bold, design: .rounded))
             .foregroundStyle(.white)

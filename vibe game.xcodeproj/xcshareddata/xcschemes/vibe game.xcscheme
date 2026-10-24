@@ -17,6 +17,7 @@
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "A1FC6499301F94D300D96FAB"
                BuildableName = "Orbitor.app"
+               BlueprintName = "vibe game"
                ReferencedContainer = "container:vibe game.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
@@ -68,6 +69,7 @@
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "A1FC6499301F94D300D96FAB"
             BuildableName = "Orbitor.app"
+            BlueprintName = "vibe game"
             ReferencedContainer = "container:vibe game.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
@@ -84,6 +86,7 @@
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "A1FC6499301F94D300D96FAB"
             BuildableName = "Orbitor.app"
+            BlueprintName = "vibe game"
             ReferencedContainer = "container:vibe game.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
